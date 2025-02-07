@@ -1,0 +1,16 @@
+{
+  "name": "tuotanto",
+  "version": "1.0.0",
+  "description": "Projektinhallintasovellus persistentillä tallennuksella ja käyttäjäjakamisella",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.17.1",
+    "body-parser": "^1.19.0",
+    "mongoose": "^6.0.0",
+    "jsonwebtoken": "^8.5.1",
+    "bcryptjs": "^2.4.3"
+  }
+}

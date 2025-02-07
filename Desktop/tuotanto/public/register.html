@@ -1,0 +1,54 @@
+<!-- public/register.html -->
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+  <meta charset="UTF-8">
+  <title>Rekisteröidy</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>Rekisteröidy</h1>
+  <form id="registerForm">
+    <label>
+      Nimi:
+      <input type="text" name="name" required>
+    </label>
+    <label>
+      Sähköposti:
+      <input type="email" name="email" required>
+    </label>
+    <label>
+      Salasana:
+      <input type="password" name="password" required>
+    </label>
+    <button type="submit">Rekisteröidy</button>
+  </form>
+  <p>Onko sinulla jo tili? <a href="login.html">Kirjaudu sisään</a></p>
+  
+  <script>
+    document.getElementById('registerForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+      const data = {
+        name: formData.get('name'),
+        email: formData.get('email'),
+        password: formData.get('password')
+      };
+      fetch('/api/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      })
+      .then(res => res.json())
+      .then(result => {
+        if (result.message) {
+          alert(result.message);
+          window.location.href = 'login.html';
+        } else {
+          alert('Rekisteröityminen epäonnistui: ' + result.error);
+        }
+      });
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,49 @@
+<!-- public/login.html -->
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+  <meta charset="UTF-8">
+  <title>Kirjaudu sisään</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>Kirjaudu sisään</h1>
+  <form id="loginForm">
+    <label>
+      Sähköposti:
+      <input type="email" name="email" required>
+    </label>
+    <label>
+      Salasana:
+      <input type="password" name="password" required>
+    </label>
+    <button type="submit">Kirjaudu</button>
+  </form>
+  <p>Ei käyttäjää? <a href="register.html">Rekisteröidy</a></p>
+  
+  <script>
+    document.getElementById('loginForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+      const data = {
+        email: formData.get('email'),
+        password: formData.get('password')
+      };
+      fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      })
+      .then(res => res.json())
+      .then(result => {
+        if (result.token) {
+          localStorage.setItem('token', result.token);
+          window.location.href = 'index.html';
+        } else {
+          alert('Kirjautuminen epäonnistui: ' + result.error);
+        }
+      });
+    });
+  </script>
+</body>
+</html>

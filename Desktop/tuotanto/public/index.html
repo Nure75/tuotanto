@@ -1,0 +1,84 @@
+<!-- public/index.html -->
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+  <meta charset="UTF-8">
+  <title>Projektihallinta – Projektit</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>Projektien hallinta</h1>
+  <p><a href="login.html">Kirjaudu ulos / vaihda käyttäjää</a></p>
+  <section id="project-form">
+    <h2>Luo uusi projekti</h2>
+    <form id="newProjectForm">
+      <label>
+        Projektin nimi:
+        <input type="text" name="name" required>
+      </label>
+      <label>
+        Aloituspäivä:
+        <input type="date" name="startDate" required>
+      </label>
+      <button type="submit">Luo projekti</button>
+    </form>
+  </section>
+  
+  <section id="project-list">
+    <h2>Projektit</h2>
+    <ul id="projects"></ul>
+  </section>
+  
+  <script>
+    function getAuthHeaders() {
+      const token = localStorage.getItem('token');
+      return {
+        'Content-Type': 'application/json',
+        'Authorization': token ? 'Bearer ' + token : ''
+      };
+    }
+    
+    function loadProjects() {
+      fetch('/api/projects', { headers: getAuthHeaders() })
+        .then(res => res.json())
+        .then(data => {
+          const list = document.getElementById('projects');
+          list.innerHTML = '';
+          data.forEach(project => {
+            const li = document.createElement('li');
+            li.innerHTML = `<strong>${project.name}</strong> (Aloitus: ${new Date(project.startDate).toLocaleDateString()})
+            <a href="tasks.html?projectId=${project._id}">Tehtävät</a>
+            <button onclick="deleteProject('${project._id}')">Poista projekti</button>`;
+            list.appendChild(li);
+          });
+        });
+    }
+    
+    function deleteProject(id) {
+      if (confirm("Poistetaanko projekti?")) {
+        fetch(`/api/projects/${id}`, { method: 'DELETE', headers: getAuthHeaders() })
+          .then(() => loadProjects());
+      }
+    }
+    
+    document.getElementById('newProjectForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+      const data = {
+        name: formData.get('name'),
+        startDate: formData.get('startDate')
+      };
+      fetch('/api/projects', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data)
+      }).then(() => {
+        e.target.reset();
+        loadProjects();
+      });
+    });
+    
+    loadProjects();
+  </script>
+</body>
+</html>

@@ -1,0 +1,282 @@
+<!-- public/tasks.html -->
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+  <meta charset="UTF-8">
+  <title>Tehtävät</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a href="index.html">← Takaisin projekteihin</a>
+  <h1 id="projectName">Projektin tehtävät</h1>
+  
+  <section id="task-form">
+    <h2>Luo uusi tehtävä</h2>
+    <form id="newTaskForm">
+      <label>
+        Tehtävän nimi:
+        <input type="text" name="name" required>
+      </label>
+      <label>
+        Aloituspäivä:
+        <input type="date" name="startDate" required>
+      </label>
+      <label>
+        Arvioidut tunnit:
+        <input type="number" name="estimatedHours" required min="1">
+      </label>
+      <label>
+        Tehtävänumero:
+        <input type="number" name="taskNumber" required min="1">
+      </label>
+      <label>
+        Työaika per päivä:
+        <select name="dailyHours">
+          <option value="8" selected>8</option>
+          <option value="16">16</option>
+          <option value="24">24</option>
+        </select>
+      </label>
+      <button type="submit">Luo tehtävä</button>
+    </form>
+  </section>
+  
+  <section id="task-list">
+    <h2>Tehtävälista</h2>
+    <table border="1" id="tasksTable">
+      <thead>
+        <tr>
+          <th>Nimi</th>
+          <th>Aloituspäivä</th>
+          <th>Lopetuspäivä</th>
+          <th>Arvioidut tunnit</th>
+          <th>Päivän tunnit</th>
+          <th>Tehdyt tunnit (%)</th>
+          <th>Valmiusaste</th>
+          <th>Toiminnot</th>
+        </tr>
+      </thead>
+      <tbody id="tasksBody"></tbody>
+    </table>
+  </section>
+  
+  <section id="overall-progress">
+    <h2>Projektin kokonaisvalmius</h2>
+    <div id="progressBarContainer">
+      <div id="progressBar"></div>
+    </div>
+  </section>
+  
+  <p><a id="ganttLink" href="#">Näytä Gantt–näkymä</a></p>
+  
+  <script>
+    function getAuthHeaders() {
+      const token = localStorage.getItem('token');
+      return {
+        'Content-Type': 'application/json',
+        'Authorization': token ? 'Bearer ' + token : ''
+      };
+    }
+    
+    function getQueryParam(param) {
+      const urlParams = new URLSearchParams(window.location.search);
+      return urlParams.get(param);
+    }
+    
+    const projectId = getQueryParam('projectId');
+    let project = null;
+    let tasks = [];
+    
+    function loadProject() {
+      fetch(`/api/projects/${projectId}`, { headers: getAuthHeaders() })
+        .then(res => res.json())
+        .then(data => {
+          project = data;
+          document.getElementById('projectName').textContent = `Projektin "${project.name}" tehtävät`;
+          document.getElementById('ganttLink').href = `gantt.html?projectId=${project._id}`;
+        });
+    }
+    
+    function loadTasks() {
+      fetch(`/api/projects/${projectId}/tasks`, { headers: getAuthHeaders() })
+        .then(res => res.json())
+        .then(data => {
+          tasks = data;
+          renderTasks();
+          updateOverallProgress();
+        });
+    }
+    
+    function computeEndDate(task) {
+      const daily = task.dailyHours || 8;
+      let remainingHours = task.estimatedHours;
+      let date = new Date(task.startDate);
+      while (remainingHours > 0) {
+        const day = date.getDay();
+        if (day !== 0 && day !== 6) {
+          remainingHours -= daily;
+          if (remainingHours <= 0) break;
+        }
+        date.setDate(date.getDate() + 1);
+      }
+      return date.toISOString().split('T')[0];
+    }
+    
+    function updateOverallProgress() {
+      const totalEstimated = tasks.reduce((sum, t) => sum + t.estimatedHours, 0);
+      if (totalEstimated === 0) return;
+      const weighted = tasks.reduce((sum, t) => sum + (t.completion * t.estimatedHours), 0);
+      const overall = Math.round(weighted / totalEstimated);
+      const progressBar = document.getElementById('progressBar');
+      progressBar.style.width = overall + '%';
+      progressBar.textContent = overall + '%';
+    }
+    
+    function renderTasks() {
+      const tbody = document.getElementById('tasksBody');
+      tbody.innerHTML = '';
+      tasks.forEach(task => {
+        const tr = document.createElement('tr');
+        
+        const tdName = document.createElement('td');
+        tdName.textContent = task.name;
+        tr.appendChild(tdName);
+        
+        const tdStart = document.createElement('td');
+        tdStart.textContent = new Date(task.startDate).toLocaleDateString();
+        tr.appendChild(tdStart);
+        
+        const tdEnd = document.createElement('td');
+        tdEnd.textContent = computeEndDate(task);
+        tr.appendChild(tdEnd);
+        
+        const tdEstimated = document.createElement('td');
+        tdEstimated.textContent = task.estimatedHours;
+        tr.appendChild(tdEstimated);
+        
+        const tdDaily = document.createElement('td');
+        const selectDaily = document.createElement('select');
+        for (let i = 1; i <= 24; i++) {
+          const opt = document.createElement('option');
+          opt.value = i;
+          opt.textContent = i;
+          if (i === (task.dailyHours || 8)) opt.selected = true;
+          selectDaily.appendChild(opt);
+        }
+        tdDaily.appendChild(selectDaily);
+        const addBtn = document.createElement('button');
+        addBtn.textContent = "Lisää";
+        addBtn.addEventListener('click', () => {
+          const value = Number(selectDaily.value);
+          const newActual = task.actualHours + value;
+          fetch(`/api/projects/${projectId}/tasks/${task._id}`, {
+            method: 'PUT',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ actualHours: newActual, dailyHours: Number(selectDaily.value) })
+          })
+          .then(res => res.json())
+          .then(updatedTask => {
+            task.actualHours = updatedTask.actualHours;
+            task.dailyHours = updatedTask.dailyHours;
+            renderTasks();
+          });
+        });
+        tdDaily.appendChild(addBtn);
+        tr.appendChild(tdDaily);
+        
+        const tdActual = document.createElement('td');
+        const percentage = Math.round((task.actualHours / task.estimatedHours) * 100);
+        tdActual.textContent = `${task.actualHours}h (${percentage}%)`;
+        if (percentage > 100) {
+          tdActual.style.backgroundColor = 'red';
+          tdActual.style.color = 'white';
+        }
+        tr.appendChild(tdActual);
+        
+        const tdCompletion = document.createElement('td');
+        const inputCompletion = document.createElement('input');
+        inputCompletion.type = 'number';
+        inputCompletion.min = 0;
+        inputCompletion.max = 100;
+        inputCompletion.value = task.completion;
+        inputCompletion.addEventListener('change', () => {
+          fetch(`/api/projects/${projectId}/tasks/${task._id}`, {
+            method: 'PUT',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ completion: Number(inputCompletion.value) })
+          })
+          .then(res => res.json())
+          .then(updatedTask => {
+            task.completion = updatedTask.completion;
+            updateOverallProgress();
+          });
+        });
+        tdCompletion.appendChild(inputCompletion);
+        tr.appendChild(tdCompletion);
+        
+        const tdActions = document.createElement('td');
+        const toggleBtn = document.createElement('button');
+        toggleBtn.textContent = (task.completion < 100) ? "Merkitse valmiiksi" : "Merkitse kesken";
+        toggleBtn.addEventListener('click', () => {
+          const newCompletion = (task.completion < 100) ? 100 : 0;
+          fetch(`/api/projects/${projectId}/tasks/${task._id}`, {
+            method: 'PUT',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ completion: newCompletion })
+          })
+          .then(res => res.json())
+          .then(updatedTask => {
+            task.completion = updatedTask.completion;
+            renderTasks();
+            updateOverallProgress();
+          });
+        });
+        tdActions.appendChild(toggleBtn);
+        const deleteBtn = document.createElement('button');
+        deleteBtn.textContent = "Poista";
+        deleteBtn.addEventListener('click', () => {
+          if (confirm("Poistetaanko tehtävä?")) {
+            fetch(`/api/projects/${projectId}/tasks/${task._id}`, { method: 'DELETE', headers: getAuthHeaders() })
+            .then(() => {
+              tasks = tasks.filter(t => t._id !== task._id);
+              renderTasks();
+              updateOverallProgress();
+            });
+          }
+        });
+        tdActions.appendChild(deleteBtn);
+        tr.appendChild(tdActions);
+        
+        tbody.appendChild(tr);
+      });
+    }
+    
+    document.getElementById('newTaskForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+      const data = {
+        name: formData.get('name'),
+        startDate: formData.get('startDate'),
+        estimatedHours: formData.get('estimatedHours'),
+        taskNumber: formData.get('taskNumber'),
+        dailyHours: formData.get('dailyHours')
+      };
+      fetch(`/api/projects/${projectId}/tasks`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data)
+      })
+      .then(res => res.json())
+      .then(newTask => {
+        tasks.push(newTask);
+        tasks.sort((a, b) => a.taskNumber - b.taskNumber);
+        renderTasks();
+        e.target.reset();
+      });
+    });
+    
+    loadProject();
+    loadTasks();
+  </script>
+</body>
+</html>

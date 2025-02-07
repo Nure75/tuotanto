@@ -1,0 +1,190 @@
+<!-- public/gantt.html -->
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+  <meta charset="UTF-8">
+  <title>Gantt–näkymä</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .gantt-header {
+      position: relative;
+      background: #f0f0f0;
+      border-bottom: 1px solid #ccc;
+      height: 30px;
+      line-height: 30px;
+    }
+    .gantt-header span {
+      position: absolute;
+      text-align: center;
+      border-right: 1px solid #ccc;
+      border-bottom: 1px solid #ccc;
+      font-size: 12px;
+    }
+    .gantt-container {
+      position: relative;
+      border: 1px solid #ccc;
+      overflow-x: scroll;
+      white-space: nowrap;
+      height: 400px;
+    }
+    .grid-line {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 1px;
+      background-color: #ccc;
+    }
+    .bar-container {
+      position: absolute;
+      height: 30px;
+      background-color: #ddd;
+      overflow: hidden;
+    }
+    .progress-bar {
+      position: absolute;
+      left: 0;
+      top: 0;
+      height: 100%;
+      background-color: #4caf50;
+      color: white;
+      text-align: center;
+      font-size: 12px;
+      line-height: 30px;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+  <a href="tasks.html?projectId=" id="backLink">← Takaisin tehtävä-sivulle</a>
+  <h1 id="projectNameGantt">Gantt–näkymä</h1>
+  <div id="ganttHeader" class="gantt-header"></div>
+  <div id="ganttContainer" class="gantt-container"></div>
+  
+  <script>
+    function getAuthHeaders() {
+      const token = localStorage.getItem('token');
+      return {
+        'Content-Type': 'application/json',
+        'Authorization': token ? 'Bearer ' + token : ''
+      };
+    }
+    
+    function getQueryParam(param) {
+      const urlParams = new URLSearchParams(window.location.search);
+      return urlParams.get(param);
+    }
+    
+    const projectId = getQueryParam('projectId');
+    let project = null;
+    let tasks = [];
+    const dayWidth = 30;
+    
+    function addDays(date, days) {
+      let result = new Date(date);
+      result.setDate(result.getDate() + days);
+      return result;
+    }
+    
+    function loadProject() {
+      fetch(`/api/projects/${projectId}`, { headers: getAuthHeaders() })
+        .then(res => res.json())
+        .then(data => {
+          project = data;
+          document.getElementById('projectNameGantt').textContent = `Projektin "${project.name}" Gantt–näkymä`;
+          document.getElementById('backLink').href = `tasks.html?projectId=${project._id}`;
+        });
+    }
+    
+    function loadTasks() {
+      fetch(`/api/projects/${projectId}/tasks`, { headers: getAuthHeaders() })
+        .then(res => res.json())
+        .then(data => {
+          tasks = data;
+          renderGantt();
+        });
+    }
+    
+    function computeEndDate(task) {
+      const daily = task.dailyHours || 8;
+      let remainingHours = task.estimatedHours;
+      let date = new Date(task.startDate);
+      while (remainingHours > 0) {
+        const day = date.getDay();
+        if (day !== 0 && day !== 6) {
+          remainingHours -= daily;
+          if (remainingHours <= 0) break;
+        }
+        date.setDate(date.getDate() + 1);
+      }
+      return date;
+    }
+    
+    function renderHeader(minDate, maxDate) {
+      const header = document.getElementById('ganttHeader');
+      header.innerHTML = '';
+      const totalDays = Math.ceil((maxDate - minDate) / (1000 * 60 * 60 * 24));
+      header.style.width = (totalDays * dayWidth) + 'px';
+      let current = new Date(minDate);
+      while (current.getDay() !== 1) {
+        current = addDays(current, 1);
+      }
+      while (current <= maxDate) {
+        let offsetDays = Math.floor((current - minDate) / (1000 * 60 * 60 * 24));
+        let leftPos = offsetDays * dayWidth;
+        let span = document.createElement('span');
+        span.style.left = leftPos + 'px';
+        span.style.width = (7 * dayWidth) + 'px';
+        span.style.position = 'absolute';
+        span.textContent = current.toISOString().split('T')[0];
+        header.appendChild(span);
+        current = addDays(current, 7);
+      }
+    }
+    
+    function renderGantt() {
+      if (tasks.length === 0) return;
+      let minDate = new Date(Math.min(...tasks.map(t => new Date(t.startDate))));
+      let maxDate = new Date(Math.max(...tasks.map(t => computeEndDate(t))));
+      minDate = addDays(minDate, -7);
+      maxDate = addDays(maxDate, 7);
+      const totalDays = Math.ceil((maxDate - minDate) / (1000 * 60 * 60 * 24));
+      const container = document.getElementById('ganttContainer');
+      container.style.width = (totalDays * dayWidth) + 'px';
+      container.innerHTML = '';
+      for (let d = 0; d <= totalDays; d++) {
+        let currentDate = addDays(minDate, d);
+        if (currentDate.getDay() === 1) {
+          let line = document.createElement('div');
+          line.className = 'grid-line';
+          line.style.left = (d * dayWidth) + 'px';
+          container.appendChild(line);
+        }
+      }
+      tasks.forEach((task, index) => {
+        const taskStart = new Date(task.startDate);
+        const taskEnd = computeEndDate(task);
+        const offsetDays = (taskStart - minDate) / (1000 * 60 * 60 * 24);
+        const durationDays = (taskEnd - taskStart) / (1000 * 60 * 60 * 24);
+        const leftPos = offsetDays * dayWidth;
+        const widthPx = durationDays * dayWidth;
+        const barContainer = document.createElement('div');
+        barContainer.className = 'bar-container';
+        barContainer.style.left = leftPos + 'px';
+        barContainer.style.width = widthPx + 'px';
+        barContainer.style.top = (index * 40 + 5) + 'px';
+        const progressBar = document.createElement('div');
+        progressBar.className = 'progress-bar';
+        progressBar.style.width = (task.completion / 100 * widthPx) + 'px';
+        progressBar.textContent = task.name + ` (${task.completion}%)`;
+        barContainer.appendChild(progressBar);
+        container.appendChild(barContainer);
+      });
+      renderHeader(minDate, maxDate);
+    }
+    
+    loadProject();
+    loadTasks();
+  </script>
+</body>
+</html>
+
